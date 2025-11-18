@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIRI Risk Prediction Calculator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f6fa; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: #3498db; color: white; padding: 20px; text-align: center; }
+        .calculator { padding: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #2c3e50; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        small { display: block; margin-top: 5px; color: #666; font-size: 12px; }
+        .btn-group { display: flex; gap: 10px; margin: 20px 0; }
+        button { flex: 1; padding: 12px; border: none; border-radius: 5px; cursor: pointer; }
+        .calculate-btn { background: #27ae60; color: white; }
+        .reset-btn { background: #e74c3c; color: white; }
+        .result { padding: 20px; background: #ecf0f1; border-radius: 5px; margin-top: 20px; display: none; }
+        .risk-score { font-size: 36px; font-weight: bold; text-align: center; margin: 10px 0; }
+        .risk-bar { height: 20px; background: #ddd; border-radius: 10px; margin: 10px 0; }
+        .risk-fill { height: 100%; border-radius: 10px; width: 0%; transition: width 0.5s; }
+        .factor-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ccc; }
+        .risk-low { color: #27ae60; }
+        .risk-medium { color: #f39c12; }
+        .risk-high { color: #e74c3c; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>MIRI Risk Prediction Calculator</h1>
+            <p>Myocardial Ischemia-Reperfusion Injury Risk Assessment Tool</p>
+        </div>
+        <div class="calculator">
+            <form id="riskForm">
+                <div class="form-group">
+                    <label for="shock_index">Shock Index</label>
+                    <input type="number" id="shock_index" step="0.01" min="0" max="2" placeholder="Enter shock index, e.g., 0.5">
+                    <small>Calculation: Heart Rate / Systolic Blood Pressure</small>
+                </div>
+                <div class="form-group">
+                    <label for="timi">TIMI Score (0-14)</label>
+                    <input type="number" id="timi" min="0" max="14" placeholder="Enter TIMI score (0-14)">
+                    <small>0-3: Low risk | 4-6: Intermediate risk | 7-14: High risk</small>
+                </div>
+                <div class="form-group">
+                    <label for="culprit_vessel">Culprit Vessel</label>
+                    <select id="culprit_vessel">
+                        <option value="0">Right Coronary Artery (RCA) or Left Circumflex (LCX)</option>
+                        <option value="1">Left Anterior Descending (LAD)</option>
+                    </select>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="calculate-btn" onclick="calculateRisk()">Calculate Risk Probability</button>
+                    <button type="button" class="reset-btn" onclick="resetForm()">Reset Data</button>
+                </div>
+            </form>
+            <div class="result" id="resultSection">
+                <h3>MIRI Risk Assessment Result</h3>
+                <div class="risk-score" id="riskPercentage">0%</div>
+                <div id="riskCategory">Low Risk</div>
+                <div class="risk-bar">
+                    <div class="risk-fill" id="riskBar"></div>
+                </div>
+                <div>
+                    <h4>Result Interpretation</h4>
+                    <p id="riskInterpretation">Based on multivariate logistic regression model prediction...</p>
+                </div>
+                <div>
+                    <h4>Risk Factor Analysis</h4>
+                    <div id="riskFactors"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function calculateRisk() {
+            var inputs = getInputValues();
+            if (!validateInputs(inputs)) return;
+            var riskProbability = calculateRiskProbability(inputs);
+            displayResults(riskProbability, inputs);
+        }
+
+        function getInputValues() {
+            return {
+                shock_index: parseFloat(document.getElementById('shock_index').value) || 0,
+                timi: parseInt(document.getElementById('timi').value) || 0,
+                culprit_vessel: parseInt(document.getElementById('culprit_vessel').value) || 0
+            };
+        }
+
+        function validateInputs(inputs) {
+            if (!inputs.shock_index && inputs.shock_index !== 0) {
+                alert('Please enter shock index');
+                return false;
+            }
+            if (inputs.shock_index < 0 || inputs.shock_index > 2) {
+                alert('Shock index should be between 0 and 2');
+                return false;
+            }
+            if (!inputs.timi && inputs.timi !== 0) {
+                alert('Please enter TIMI score');
+                return false;
+            }
+            if (inputs.timi < 0 || inputs.timi > 14) {
+                alert('TIMI score should be between 0 and 14');
+                return false;
+            }
+            return true;
+        }
+
+        function calculateRiskProbability(inputs) {
+            var culprit_vessel_2 = inputs.culprit_vessel;
+            var linearCombination = -3.05583 + 
+                                   (4.47048 * inputs.shock_index) + 
+                                   (0.433743 * inputs.timi) - 
+                                   (1.64256 * culprit_vessel_2);
+            return 1 / (1 + Math.exp(-linearCombination));
+        }
+
+        function displayResults(probability, inputs) {
+            var percentage = (probability * 100).toFixed(1);
+            document.getElementById('riskPercentage').innerHTML = percentage + '%';
+            
+            var riskLevel, riskClass, interpretation, barColor;
+            if (probability < 0.3) {
+                riskLevel = "Low Risk";
+                riskClass = "risk-low";
+                interpretation = "Based on model prediction, the patient has a low risk of developing MIRI. Routine monitoring and standard treatment are recommended.";
+                barColor = "#27ae60";
+            } else if (probability < 0.7) {
+                riskLevel = "Intermediate Risk";
+                riskClass = "risk-medium";
+                interpretation = "Based on model prediction, the patient has an intermediate risk of developing MIRI. Enhanced monitoring and consideration of preventive therapy are advised.";
+                barColor = "#f39c12";
+            } else {
+                riskLevel = "High Risk";
+                riskClass = "risk-high";
+                interpretation = "Based on model prediction, the patient has a high risk of developing MIRI. Active intervention and close monitoring are required.";
+                barColor = "#e74c3c";
+            }
+            
+            document.getElementById('riskCategory').innerHTML = riskLevel;
+            document.getElementById('riskCategory').className = "risk-level " + riskClass;
+            document.getElementById('riskBar').style.width = percentage + '%';
+            document.getElementById('riskBar').style.background = barColor;
+            document.getElementById('riskInterpretation').innerHTML = interpretation;
+            
+            generateRiskFactors(inputs, document.getElementById('riskFactors'));
+            document.getElementById('resultSection').style.display = 'block';
+        }
+
+        function generateRiskFactors(inputs, container) {
+            var factorsHTML = '';
+            
+            var shockRisk = '', shockColor = '#27ae60';
+            if (inputs.shock_index < 0.5) shockRisk = 'Low';
+            else if (inputs.shock_index <= 0.7) shockRisk = 'Normal';
+            else if (inputs.shock_index <= 0.9) { shockRisk = 'Elevated'; shockColor = '#f39c12'; }
+            else { shockRisk = 'Significantly Elevated'; shockColor = '#e74c3c'; }
+            factorsHTML += '<div class="factor-item"><span>Shock Index</span><span style="color: ' + shockColor + ';">' + inputs.shock_index + ' (' + shockRisk + ')</span></div>';
+            
+            var timiRisk = '', timiColor = '#27ae60';
+            if (inputs.timi <= 3) timiRisk = 'Low Risk';
+            else if (inputs.timi <= 6) { timiRisk = 'Intermediate Risk'; timiColor = '#f39c12'; }
+            else { timiRisk = 'High Risk'; timiColor = '#e74c3c'; }
+            factorsHTML += '<div class="factor-item"><span>TIMI Score</span><span style="color: ' + timiColor + ';">' + inputs.timi + ' points (' + timiRisk + ')</span></div>';
+            
+            var vesselName = inputs.culprit_vessel === 0 ? 'Right Coronary Artery (RCA) or Left Circumflex (LCX)' : 'Left Anterior Descending (LAD)';
+            factorsHTML += '<div class="factor-item"><span>Culprit Vessel</span><span>' + vesselName + '</span></div>';
+            
+            container.innerHTML = factorsHTML;
+        }
+
+        function resetForm() {
+            document.getElementById('riskForm').reset();
+            document.getElementById('resultSection').style.display = 'none';
+        }
+
+        window.onload = function() {
+            document.getElementById('timi').oninput = function() {
+                var value = parseInt(this.value);
+                if (value < 0) this.value = 0;
+                if (value > 14) this.value = 14;
+            };
+            document.getElementById('shock_index').oninput = function() {
+                var value = parseFloat(this.value);
+                if (value < 0) this.value = 0;
+                if (value > 2) this.value = 2;
+            };
+        };
+    </script>
+</body>
+</html>
